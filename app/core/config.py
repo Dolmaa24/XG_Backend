@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     LLM_MODEL: str = "claude-sonnet-4-20250514"
 
+    # AI microservice (the AI team's HTTP layer). When disabled or unreachable,
+    # the backend falls back to its own local services (parser/matcher/interviewer).
+    AI_SERVICE_ENABLED: bool = False
+    AI_SERVICE_URL: str = "http://localhost:9000"
+    AI_SERVICE_TIMEOUT: float = 15.0
+
     # NLP Models
     SPACY_MODEL: str = "en_core_web_sm"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
@@ -65,14 +71,29 @@ class Settings(BaseSettings):
     # File Validation
     MAX_UPLOAD_SIZE_MB: int = 5
     ALLOWED_MIME_TYPES: str = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    # Image MIME types accepted for avatar uploads
+    ALLOWED_IMAGE_MIME_TYPES: str = "image/png,image/jpeg,image/webp"
+    MAX_AVATAR_SIZE_MB: int = 2
+
+    # Pagination defaults (applied to list endpoints)
+    DEFAULT_PAGE_SIZE: int = 20
+    MAX_PAGE_SIZE: int = 100
 
     @property
     def allowed_mime_types_list(self) -> list[str]:
         return [m.strip() for m in self.ALLOWED_MIME_TYPES.split(",")]
 
     @property
+    def allowed_image_mime_types_list(self) -> list[str]:
+        return [m.strip() for m in self.ALLOWED_IMAGE_MIME_TYPES.split(",")]
+
+    @property
     def max_upload_size_bytes(self) -> int:
         return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+    @property
+    def max_avatar_size_bytes(self) -> int:
+        return self.MAX_AVATAR_SIZE_MB * 1024 * 1024
 
     model_config = {"env_file": ".env", "case_sensitive": True}
 

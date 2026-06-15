@@ -48,6 +48,30 @@ async def validate_upload(file: UploadFile) -> bytes:
     return content
 
 
+async def validate_image_upload(file: UploadFile) -> bytes:
+    """SECURITY: validate avatar uploads — size + magic-byte MIME (images only)."""
+    content = await file.read()
+
+    if len(content) > settings.max_avatar_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Image exceeds maximum allowed size of {settings.MAX_AVATAR_SIZE_MB}MB",
+        )
+
+    detected_mime = magic.from_buffer(content[:2048], mime=True)
+    if detected_mime not in settings.allowed_image_mime_types_list:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"File type '{detected_mime}' is not allowed. Upload PNG, JPEG, or WebP only.",
+        )
+
+    original = file.filename or "avatar"
+    if any(c in original for c in ("..", "/", "\\", "\x00")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename")
+
+    return content
+
+
 async def save_file(content: bytes, original_filename: str, user_id: str) -> str:
     safe_name = _sanitize_filename(original_filename)
     # SECURITY [MEDIUM]: user_id prefix scopes files per user, uuid prevents collisions
@@ -105,3 +129,26 @@ def _read_from_s3(s3_path: str) -> bytes:
     )
     response = s3.get_object(Bucket=bucket, Key=key)
     return response["Body"].read()
+
+
+def delete_file(file_path: str) -> None:
+    """Best-effort delete of a stored file (local or S3). Never raises."""
+    try:
+        if file_path.startswith("s3://"):
+            import boto3
+            parts = file_path.replace("s3://", "").split("/", 1)
+            bucket, key = parts[0], parts[1]
+            s3 = boto3.client(
+                "s3",
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_REGION,
+            )
+            s3.delete_object(Bucket=bucket, Key=key)
+        else:
+            p = Path(file_path)
+            if p.exists():
+                p.unlink()
+        logger.info({"event": "file_deleted", "path": file_path})
+    except Exception as e:
+        logger.warning({"event": "file_delete_failed", "path": file_path, "error": str(e)})

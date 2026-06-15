@@ -1,19 +1,21 @@
 import logging
 from typing import Optional
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# PERF [CRITICAL]: model loaded ONCE at startup, not per request
-_model: Optional[SentenceTransformer] = None
+# PERF [CRITICAL]: model loaded ONCE at startup, not per request.
+# sentence-transformers (and its torch dependency) is imported lazily so the
+# app can boot without it when running against the AI microservice.
+_model = None
 
 
-def load_embedding_model() -> SentenceTransformer:
+def load_embedding_model():
     global _model
     if _model is None:
+        from sentence_transformers import SentenceTransformer
         _model = SentenceTransformer(settings.EMBEDDING_MODEL)
         logger.info({"event": "embedding_model_loaded", "model": settings.EMBEDDING_MODEL})
     return _model
@@ -36,9 +38,7 @@ def compute_match_score(
     Semantic similarity between candidate profile and job requirements.
     Returns: {match_score (0-100), matched_skills, missing_skills}
     """
-    model = load_embedding_model()
-
-    # EDGE CASE: both inputs empty
+    # EDGE CASE: both inputs empty — return before loading the (heavy) model
     if not candidate_skills and not candidate_text:
         logger.warning({"event": "match_empty_candidate"})
         return {"match_score": 0.0, "matched_skills": [], "missing_skills": list(job_skills)}
@@ -46,6 +46,8 @@ def compute_match_score(
     if not job_skills and not job_description:
         logger.warning({"event": "match_empty_job"})
         return {"match_score": 0.0, "matched_skills": [], "missing_skills": []}
+
+    model = load_embedding_model()
 
     # ── Skill-level semantic matching ────────────────────────────────────────
     matched: list[str] = []

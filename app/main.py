@@ -12,9 +12,13 @@ from slowapi.util import get_remote_address
 
 from app.core.config import settings
 from app.core.database import init_db
+from app.models import models  # noqa: F401 — ensure tables register on Base.metadata
 from app.services.parser import load_spacy_model
 from app.services.matcher import load_embedding_model
-from app.api.v1 import auth, jobs, resume, match, interview, ranking
+from app.api import (
+    auth, candidates, resumes_admin, jobs, match, ai, interviews, dashboard, analytics,
+    profile, resume_candidate, applications, mock_interview, assessment, settings as settings_router, search,
+)
 from app.schemas.schemas import HealthResponse
 
 # ── JSON structured logging ──────────────────────────────────────────────────
@@ -36,9 +40,14 @@ async def lifespan(app: FastAPI):
     # Initialise DB tables
     await init_db()
 
-    # Pre-load NLP models so first request is not slow
-    load_spacy_model()
-    load_embedding_model()
+    # Pre-load NLP models so first request is not slow. These power the LOCAL
+    # fallback services; if unavailable (e.g. running purely against the AI
+    # microservice, or models not downloaded), log and continue.
+    try:
+        load_spacy_model()
+        load_embedding_model()
+    except Exception as e:
+        logger.warning({"event": "model_preload_skipped", "error": str(e)})
 
     logger.info({"event": "startup_complete"})
     yield
@@ -79,13 +88,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(jobs.router, prefix="/api/v1")
-app.include_router(resume.router, prefix="/api/v1")
-app.include_router(match.router, prefix="/api/v1")
-app.include_router(interview.router, prefix="/api/v1")
-app.include_router(ranking.router, prefix="/api/v1")
+# ── Routers (frontend /api contract) ──────────────────────────────────────────
+_API = "/api"
+for _r in (
+    auth, candidates, resumes_admin, jobs, match, ai, interviews, dashboard, analytics,
+    profile, resume_candidate, applications, mock_interview, assessment, settings_router, search,
+):
+    app.include_router(_r.router, prefix=_API)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

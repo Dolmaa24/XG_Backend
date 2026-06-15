@@ -53,21 +53,61 @@ celery -A app.tasks.celery_tasks.celery_app worker --loglevel=info
 
 ---
 
-## API Endpoints
+## API
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/api/v1/auth/register` | None | Register candidate or HR user |
-| POST | `/api/v1/auth/login` | None | Login, returns JWT |
-| POST | `/api/v1/jobs/create` | HR | Create a job posting |
-| GET | `/api/v1/jobs/` | Any | List all jobs |
-| POST | `/api/v1/resume/upload` | Candidate | Upload resume PDF |
-| GET | `/api/v1/resume/profile/{id}` | Owner/HR | Get parsed profile |
-| POST | `/api/v1/match/score` | Any | Compute job match score |
-| POST | `/api/v1/interview/start` | Candidate | Start AI interview |
-| POST | `/api/v1/interview/respond` | Candidate | Submit answer |
-| GET | `/api/v1/ranking/{job_id}` | HR | Get ranked candidates |
-| GET | `/health` | None | Health check |
+The public API follows the frontend contract under the `/api` prefix, split into
+an **Admin Dashboard** and a **Candidate Dashboard**. Full interactive docs at
+`/docs`. `auth` (`admin`/`hr`) is staff; `candidate` endpoints allow the resource
+owner or staff. List endpoints are paginated (`?page=&limit=`) and return
+`{ items, total, page, limit }`.
+
+### Admin Dashboard
+| Method | Path | Auth |
+|---|---|---|
+| POST | `/api/auth/login` | None |
+| POST | `/api/auth/logout` | Any (revokes token) |
+| POST | `/api/auth/register` | None |
+| GET | `/api/admin/profile` | Staff |
+| GET | `/api/candidates` · `/api/candidates/search?q=` · `/api/candidates/{id}` | Staff |
+| DELETE | `/api/candidates/{id}` | Staff |
+| POST | `/api/resumes/upload` | Staff |
+| GET | `/api/resumes` · `/api/resumes/{id}` · `/api/resumes/download/{id}` | Staff |
+| DELETE | `/api/resumes/{id}` | Staff |
+| POST · GET | `/api/jobs` | Staff · Any |
+| PUT · DELETE | `/api/jobs/{id}` | Staff |
+| GET | `/api/match-results` | Staff |
+| GET | `/api/ai/recommendations` | Staff |
+| GET | `/api/interviews` | Staff |
+| GET | `/api/dashboard/summary` · `/activity` · `/progress` | Staff |
+| GET | `/api/analytics/skills` · `/status` · `/match-scores` · `/interview-performance` | Staff |
+
+### Candidate Dashboard
+| Method | Path | Auth |
+|---|---|---|
+| GET · PUT | `/api/profile/{userId}` | Owner/Staff |
+| POST | `/api/profile` · `/api/profile/upload-avatar` | Owner/Staff |
+| POST | `/api/resume/upload` | Candidate |
+| GET | `/api/resume/{userId}` | Owner/Staff |
+| PUT · DELETE | `/api/resume/{resumeId}` | Owner/Staff |
+| GET | `/api/ai/skill-analysis/{userId}` | Owner/Staff |
+| GET | `/api/jobs/recommendations/{userId}` · `/api/jobs/search?query=` | Owner/Staff · Any |
+| GET | `/api/applications/{userId}` | Owner/Staff |
+| POST · DELETE | `/api/applications/apply` · `/api/applications/{id}` | Owner/Staff |
+| GET | `/api/interviews/status/{userId}` | Owner/Staff |
+| POST | `/api/mock-interview/start` · `/submit` | Candidate |
+| GET | `/api/mock-interview/questions` | Any |
+| GET | `/api/assessment/start` · `/api/assessment/result/{userId}` | Candidate · Owner/Staff |
+| POST | `/api/assessment/submit` | Candidate |
+| GET · PUT | `/api/settings/{userId}` | Owner/Staff |
+| GET | `/api/search/jobs?query=` | Any |
+| GET | `/health` | None |
+
+### AI integration
+AI-powered features (parsing, matching, interviews, recommendations, skill
+analysis, assessments) route through `app/services/ai_client.py`. With
+`AI_SERVICE_ENABLED=true` it calls the AI team's microservice at `AI_SERVICE_URL`;
+otherwise (or on error/timeout) it falls back to the backend's own local services.
+See [docs/AI_INTEGRATION_CONTRACT.md](docs/AI_INTEGRATION_CONTRACT.md).
 
 ---
 
@@ -101,11 +141,13 @@ backend/
 │   │   ├── config.py        # All settings via pydantic-settings
 │   │   ├── security.py      # JWT, bcrypt, RBAC
 │   │   └── database.py      # Async SQLAlchemy engine
-│   ├── models/models.py     # All 5 DB tables
+│   ├── models/models.py     # DB tables (users, jobs, resumes, interviews, rankings,
+│   │                        #   profiles, applications, settings, assessments, mock_interviews)
 │   ├── schemas/schemas.py   # All Pydantic request/response models
-│   ├── api/v1/              # Route handlers
-│   ├── services/            # Business logic (parser, matcher, interviewer, ranker)
-│   ├── tasks/               # Celery background tasks
+│   ├── api/                 # Route handlers (16 routers under /api)
+│   ├── services/            # parser, matcher, interviewer, ranker, ai_client,
+│   │                        #   aggregations, assessment, resume_jobs
+│   ├── tasks/               # Celery background tasks (optional; parsing also runs in-process)
 │   └── utils/               # File handler
 ├── tests/test_suite.py
 ├── Dockerfile
