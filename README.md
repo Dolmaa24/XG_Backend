@@ -97,6 +97,14 @@ Default weights: `30% / 30% / 40%` — configurable per job in the database.
 backend/
 ├── app/
 │   ├── main.py              # FastAPI app, lifespan, routers
+│   ├── ai/                  # AI layer (integrated from XTRAGRAD-AI)
+│   │   ├── config/          # AI settings (backed by core config)
+│   │   ├── resume_parser/   # Education & experience extractors
+│   │   ├── matching_engine/ # Skill + job match scoring
+│   │   ├── interview_engine/# Rubric, interview config
+│   │   ├── ranking_engine/  # Weighted scoring defaults
+│   │   ├── prompts.py       # LLM prompt templates
+│   │   └── docs/            # AI design documentation
 │   ├── core/
 │   │   ├── config.py        # All settings via pydantic-settings
 │   │   ├── security.py      # JWT, bcrypt, RBAC
@@ -108,11 +116,27 @@ backend/
 │   ├── tasks/               # Celery background tasks
 │   └── utils/               # File handler
 ├── tests/test_suite.py
+├── tests/test_ai_layer.py   # AI layer integration tests
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
 └── .env.example
 ```
+
+---
+
+## AI Layer Integration
+
+The `app/ai/` package integrates the AI layer from [XTRAGRAD-AI commit e0bf2eb](https://github.com/XTRAGRAD-AI/AI-HR-Recruitment-Simulator/commit/e0bf2ebf297dcc00390d06f886de9f6e226ef963). Services delegate to AI modules while preserving all existing API contracts.
+
+| Service | AI Module | Integration |
+|---------|-----------|-------------|
+| `parser.py` | `resume_parser/` | Supplements education/experience extraction |
+| `matcher.py` | `matching_engine/` | Semantic + keyword matching, weighted blend |
+| `interviewer.py` | `interview_engine/`, `prompts.py` | Rubric-driven LLM prompts |
+| `ranker.py` | `ranking_engine/` | Centralized weighted scoring |
+
+See `app/ai/README.md` for full AI layer documentation.
 
 ---
 
