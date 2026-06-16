@@ -10,6 +10,8 @@ from spacy.language import Language
 
 from app.core.config import settings
 from app.utils.file_handler import read_file
+from app.ai.resume_parser.education_extractor import extract_education as ai_extract_education
+from app.ai.resume_parser.experience_extractor import extract_experience as ai_extract_experience
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +154,7 @@ def _extract_skills(text: str) -> list[str]:
 
 
 def _extract_education(text: str) -> list[dict]:
+    """Merge line-based extraction with AI layer keyword extractor."""
     lines = text.split("\n")
     education = []
     for line in lines:
@@ -159,10 +162,17 @@ def _extract_education(text: str) -> list[dict]:
             entry = line.strip()
             if entry and len(entry) > 5:
                 education.append({"raw": entry[:300]})
+
+    # Supplement with AI layer keyword matches
+    for entry in ai_extract_education(text):
+        if entry not in education:
+            education.append(entry)
+
     return education[:5]
 
 
 def _extract_experience(doc, text: str) -> list[dict]:
+    """Merge date/role line extraction with AI layer keyword extractor."""
     lines = text.split("\n")
     date_pattern = re.compile(
         r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|"
@@ -180,6 +190,11 @@ def _extract_experience(doc, text: str) -> list[dict]:
             entry = " ".join(lines[max(0, i - 1): i + 2]).strip()
             if entry:
                 experience.append({"raw": entry[:300]})
+
+    for entry in ai_extract_experience(text):
+        if entry not in experience:
+            experience.append(entry)
+
     return experience[:10]
 
 

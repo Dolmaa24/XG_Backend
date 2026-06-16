@@ -4,14 +4,15 @@ import re
 from typing import Optional
 
 from app.core.config import settings
+from app.ai.config.settings import get_ai_settings
+from app.ai.interview_engine.interview_config import MAX_QUESTIONS
+from app.ai.prompts import build_full_system_prompt
 
 logger = logging.getLogger(__name__)
 
-# ── All hardcoded values pulled from config ──────────────────────────────────
-# REFACTOR [MEDIUM]: MAX_QUESTIONS was hardcoded as literal 5 — now from settings
-MAX_QUESTIONS = settings.MAX_INTERVIEW_QUESTIONS
-LLM_MAX_TOKENS = settings.LLM_MAX_TOKENS
-ANSWER_MAX_LENGTH = settings.ANSWER_MAX_LENGTH
+_ai_cfg = get_ai_settings()
+LLM_MAX_TOKENS = _ai_cfg.LLM_MAX_TOKENS
+ANSWER_MAX_LENGTH = _ai_cfg.ANSWER_MAX_LENGTH
 
 # SECURITY [HIGH]: expanded injection phrase list + unicode normalization
 _INJECTION_PHRASES = [
@@ -109,9 +110,6 @@ def _build_system_prompt(
     required_skills: list[str],
     candidate_profile: dict,
 ) -> str:
-    # SECURITY [HIGH]: sanitize job/profile data before embedding in system prompt
-    # HR-created job titles and candidate data go into the system prompt —
-    # a malicious HR user could inject instructions here
     safe_title = _sanitize_input(job_title)[:200]
     skills_str = ", ".join(str(s)[:50] for s in required_skills[:30])
     candidate_skills = ", ".join(
@@ -119,29 +117,15 @@ def _build_system_prompt(
     ) or "not specified"
     experience = candidate_profile.get("experience", [])
     exp_summary = "; ".join(
-        [str(e.get("raw", ""))[:100] for e in experience[:3]]
+        [str(e.get("raw", e.get("role", "")))[:100] for e in experience[:3]]
     ) or "not specified"
 
-    return f"""You are a professional technical interviewer conducting a structured job interview.
-
-Job Title: {safe_title}
-Required Skills: {skills_str}
-Candidate Skills: {candidate_skills}
-Candidate Experience: {exp_summary}
-
-Rules:
-1. Ask relevant technical and behavioural questions based on the job requirements.
-2. Vary between technical, situational, and behavioural question types.
-3. Never repeat a question already asked in this conversation.
-4. Keep questions concise and clear.
-
-CRITICAL: Respond ONLY with valid JSON. No prose, no markdown fences, no text outside JSON.
-
-To generate a question:
-{{"type": "question", "question": "<your question>", "category": "technical|behavioural|situational"}}
-
-To evaluate an answer:
-{{"type": "evaluation", "score": <integer 0-10>, "feedback": "<brief feedback>", "next_question": "<next question string or null>"}}"""
+    return build_full_system_prompt(
+        job_title=safe_title,
+        required_skills=skills_str,
+        candidate_skills=candidate_skills,
+        experience_summary=exp_summary,
+    )
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

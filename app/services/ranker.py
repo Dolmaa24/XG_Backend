@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Ranking, User, Job
 from app.services.interviewer import generate_candidate_summary
+from app.ai.ranking_engine.weights import compute_weighted_score
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,15 @@ async def compute_and_store_ranking(
     if not job:
         raise ValueError(f"Job {job_id} not found")
 
-    # PERF [MEDIUM]: weights come from the job row — no separate query needed
-    final_score = round(
-        resume_score   * job.weight_resume
-        + match_score  * job.weight_match
-        + interview_score * job.weight_interview,
-        2,
+    final_score = compute_weighted_score(
+        resume_score,
+        match_score,
+        interview_score,
+        weights={
+            "resume": job.weight_resume,
+            "match": job.weight_match,
+            "interview": job.weight_interview,
+        },
     )
 
     # Upsert — avoid duplicate rows per (user, job) pair

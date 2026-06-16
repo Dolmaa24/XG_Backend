@@ -3,6 +3,9 @@ from typing import Optional
 import numpy as np
 
 from app.core.config import settings
+from app.ai.config.settings import get_ai_settings
+from app.ai.matching_engine.job_matcher import calculate_match_score as blend_scores
+from app.ai.matching_engine.skill_matcher import skill_match_score as keyword_skill_score
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +64,8 @@ def compute_match_score(
         cand_embeddings = all_embeddings[: len(candidate_skills)]
         job_embeddings = all_embeddings[len(candidate_skills):]
 
-        # REFACTOR: threshold pulled from config
-        threshold = settings.SKILL_MATCH_THRESHOLD
+        # REFACTOR: threshold pulled from AI config
+        threshold = get_ai_settings().SKILL_MATCH_THRESHOLD
 
         for j_idx, j_skill in enumerate(job_skills):
             sims = [
@@ -84,17 +87,17 @@ def compute_match_score(
                             convert_to_numpy=True, show_progress_bar=False)
         doc_score = _cosine_similarity(vecs[0], vecs[1]) * 100
 
-    # ── Weighted blend ────────────────────────────────────────────────────────
-    # REFACTOR: weights pulled from config
-    sw = settings.SKILL_SCORE_WEIGHT
-    dw = settings.DOC_SCORE_WEIGHT
-
+    # ── Weighted blend via AI layer ───────────────────────────────────────────
     if candidate_skills and job_skills and candidate_text and job_description:
-        final_score = round(skill_score * sw + doc_score * dw, 2)
+        final_score = blend_scores(skill_score, doc_score)
     elif candidate_skills and job_skills:
         final_score = round(skill_score, 2)
-    else:
+    elif candidate_text and job_description:
         final_score = round(doc_score, 2)
+    else:
+        # Fallback: keyword overlap when embeddings unavailable
+        overlap = keyword_skill_score(candidate_skills, job_skills) * 100
+        final_score = round(overlap, 2)
 
     final_score = min(final_score, 100.0)
 
