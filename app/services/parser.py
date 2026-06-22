@@ -253,6 +253,9 @@ def parse_resume(file_path: str) -> dict:
     # PERF: cap input length via config to prevent memory spikes on very large docs
     doc = nlp(text[:settings.SPACY_TEXT_CAP])
 
+    from app.ai.resume_parser.entity_extractor import extract_entities
+    entities = extract_entities(text[:settings.SPACY_TEXT_CAP])
+
     parsed = {
         "name":             _extract_name(doc),
         "email":            _extract_email(text),
@@ -261,6 +264,7 @@ def parse_resume(file_path: str) -> dict:
         "education":        _extract_education(text),
         "experience":       _extract_experience(doc, text),
         "certifications":   _extract_certifications(text),
+        "entities":         entities,
     }
 
     parsed["resume_score"] = _score_resume(parsed)

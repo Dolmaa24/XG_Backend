@@ -141,6 +141,7 @@ async def analytics_interview_performance(db: AsyncSession) -> dict:
 
 
 async def match_results(db: AsyncSession, page: int, limit: int) -> tuple[list[dict], int]:
+    from app.ai.ranking_engine.recommendation import recommendation as ai_recommendation
     total = await db.scalar(select(func.count()).select_from(Ranking)) or 0
     rows = (await db.execute(
         select(Ranking, User, Job)
@@ -159,5 +160,6 @@ async def match_results(db: AsyncSession, page: int, limit: int) -> tuple[list[d
         "interview_score": ranking.interview_score,
         "final_score": ranking.final_score,
         "status": ranking.status.value,
+        "recommendation": ai_recommendation(ranking.final_score),
     } for ranking, user, job in rows]
     return items, total

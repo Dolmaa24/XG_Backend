@@ -409,6 +409,7 @@ class MatchResultOut(BaseModel):
     interview_score: float
     final_score: float
     status: str
+    recommendation: str
 
 
 # ── Dashboard & analytics ──────────────────────────────────────────────────────
